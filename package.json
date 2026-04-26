@@ -11,7 +11,7 @@
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:tunnel": "concurrently \"npm run dev:all\" \"npm run tunnel:client\"",
     "start:server": "npm --prefix server run start",
-    "tunnel:client": "cloudflared tunnel --url http://localhost:5173",
+    "tunnel:client": "powershell -NoProfile -Command \"& 'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe' tunnel --url http://localhost:5173\"",
     "build": "vite build"
   },
   "dependencies": {

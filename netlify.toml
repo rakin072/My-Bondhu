@@ -4,5 +4,6 @@
 
 [[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  to = "https://jumping-thou-amongst-justin.trycloudflare.com/:splat"
+  status = 302
+  force = true

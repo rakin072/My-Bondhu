@@ -53,6 +53,10 @@ export type AppNotification = {
 };
 
 const DEV_TELEGRAM_ID_KEY = "mybondhu-dev-telegram-id";
+const API_BASE_URL = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  "https://utc-leonard-linux-bin.trycloudflare.com"
+).replace(/\/$/, "");
 const LOCAL_STATE_KEY_PREFIX = "mybondhu-local-state";
 const LOCAL_MINING_COOLDOWN_MIN = 1;
 const LOCAL_MINING_REWARD = 10;
@@ -93,7 +97,13 @@ const getTelegramUser = (): TelegramWebAppUser | null => {
   return window.Telegram?.WebApp?.initDataUnsafe?.user ?? null;
 };
 
-const apiUrl = (path: string): string => path;
+const apiUrl = (path: string): string => {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  return `${API_BASE_URL}${path}`;
+};
 
 const parseTimestamp = (value: string | undefined): string => {
   if (!value) {

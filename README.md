@@ -109,7 +109,7 @@ For temporary testing, Netlify can redirect to the current Cloudflare Quick Tunn
 
 Current redirect target:
 
-- `https://jumping-thou-amongst-justin.trycloudflare.com`
+- `https://utc-leonard-linux-bin.trycloudflare.com`
 
 This redirect is temporary because the `trycloudflare.com` URL changes when the tunnel restarts.
 

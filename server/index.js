@@ -34,10 +34,7 @@ const toUnixSec = (value) => {
 };
 
 const ensureUserMiningCompletion = async (userid) => {
-  const user = await db.get(
-    "SELECT userid, mining_status, mining_end_time FROM users WHERE userid = ?",
-    [String(userid)],
-  );
+  const user = await db.get("SELECT * FROM users WHERE userid = ?", [String(userid)]);
   if (!user) return null;
 
   if (user.mining_status !== "active" || !user.mining_end_time) {
@@ -55,16 +52,10 @@ const ensureUserMiningCompletion = async (userid) => {
       "UPDATE users SET mining_status = 'completed' WHERE userid = ? AND mining_status = 'active'",
       [String(userid)],
     );
-    return await db.get(
-      "SELECT userid, mining_status, mining_start_time, mining_end_time, points FROM users WHERE userid = ?",
-      [String(userid)],
-    );
+    return await db.get("SELECT * FROM users WHERE userid = ?", [String(userid)]);
   }
 
-  return await db.get(
-    "SELECT userid, mining_status, mining_start_time, mining_end_time, points FROM users WHERE userid = ?",
-    [String(userid)],
-  );
+  return user;
 };
 
 const migrateUsersTable = async () => {

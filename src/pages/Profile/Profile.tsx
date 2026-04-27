@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Camera, Settings, Check } from "lucide-react";
-import { getProfile, syncTelegramUser, updateProfile, type AppProfile } from "../../lib/telegram";
+import { getProfile, updateProfile, type AppProfile } from "../../lib/telegram";
 
 export const Profile = (): JSX.Element => {
     const [profile, setProfile] = useState<AppProfile | null>(null);
@@ -18,7 +18,6 @@ export const Profile = (): JSX.Element => {
     useEffect(() => {
         const bootstrap = async () => {
             try {
-                await syncTelegramUser();
                 const currentProfile = await getProfile();
                 setProfile(currentProfile);
                 setAvatarUrl(currentProfile.avatarUrl);
@@ -75,6 +74,14 @@ export const Profile = (): JSX.Element => {
     const telegramDisplay = profile?.telegramId ? `+${profile.telegramId}` : "-";
     const verificationLabel = profile?.verificationStatus ?? "pending";
     const canWithdraw = Boolean(profile?.canWithdraw);
+    const passportLabel = profile?.passportStatus ?? "pending";
+    const createdDate = profile?.createdAt
+        ? new Date(profile.createdAt).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+        })
+        : "-";
 
 
     return (
@@ -115,10 +122,19 @@ export const Profile = (): JSX.Element => {
                     )}
                 </div>
 
-                <h2 className="text-[20px] font-medium text-[#0F172A] tracking-tight mb-7">{fullName}</h2>
+                <h2 className="text-[20px] font-medium text-[#0F172A] tracking-tight mb-2">{fullName}</h2>
+                <div className="text-[12px] text-[#6B7280] mb-7">@{profile?.username ?? "guest"}</div>
 
                 {/* Info Card */}
                 <div className="w-full bg-white rounded flex flex-col shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-gray-100 px-5 pt-4 pb-5">
+                    {/* Current Balance */}
+                    <div className="mb-4">
+                        <label className="block text-[11px] font-bold text-[#4B5563] mb-1">Current Balance</label>
+                        <div className="text-[#2C5FF6] text-[15px] font-medium">{profile?.balance ?? 0} Gold Coins</div>
+                    </div>
+
+                    <div className="w-[110%] -ml-[5%] h-[1px] bg-gray-100 mb-4" />
+
                     {/* Telegram ID */}
                     <div className="mb-4">
                         <label className="block text-[11px] font-bold text-[#4B5563] mb-1">Telegram ID</label>
@@ -130,7 +146,15 @@ export const Profile = (): JSX.Element => {
                     {/* Passport */}
                     <div className="mb-4">
                         <label className="block text-[11px] font-bold text-[#4B5563] mb-1">Passport</label>
-                        <div className="text-[#2C5FF6] text-[15px] font-medium">Upload Document</div>
+                        <div className="text-[#2C5FF6] text-[15px] font-medium capitalize">{passportLabel}</div>
+                    </div>
+
+                    <div className="w-[110%] -ml-[5%] h-[1px] bg-gray-100 mb-4" />
+
+                    {/* Member Since */}
+                    <div className="mb-4">
+                        <label className="block text-[11px] font-bold text-[#4B5563] mb-1">Member Since</label>
+                        <div className="text-[#2C5FF6] text-[15px] font-medium">{createdDate}</div>
                     </div>
 
                     <div className="w-[110%] -ml-[5%] h-[1px] bg-gray-100 mb-4" />

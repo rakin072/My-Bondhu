@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getNotifications, markNotificationAsRead, syncTelegramUser, type AppNotification } from "../lib/telegram";
+import { getNotifications, markNotificationAsRead, type AppNotification } from "../lib/telegram";
 
 export interface NotificationItem {
     id: number;
@@ -33,7 +33,6 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
     const refreshNotifications = useCallback(async () => {
         try {
-            await syncTelegramUser();
             const items = await getNotifications();
             setNotifications(items.map(mapNotification));
         } catch {

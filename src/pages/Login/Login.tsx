@@ -1,18 +1,13 @@
 import { Send } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { syncTelegramUser } from "../../lib/telegram";
 import miningIllustrationLogin from "../../assets/mining-illustration-login.png";
 
 export const Login = (): JSX.Element => {
     const navigate = useNavigate();
 
-    const handleLogin = async () => {
-        try {
-            await syncTelegramUser();
-        } finally {
-            navigate("/home");
-        }
+    const handleLogin = () => {
+        navigate("/home");
     };
 
     return (
@@ -36,7 +31,7 @@ export const Login = (): JSX.Element => {
                     {/* Action Button */}
                     <div className="mt-auto pt-4">
                         <Button
-                            onClick={() => void handleLogin()}
+                            onClick={handleLogin}
                             className="w-full bg-[#2C5FF6] hover:bg-[#2C5FF6]/90 text-white font-bold py-7 rounded-[26px] text-[17px] flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
                         >
                             Login with Telegram

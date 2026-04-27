@@ -52,6 +52,14 @@ export type AppNotification = {
   createdAt: string;
 };
 
+export type LeaderboardPlayer = {
+  userid: string;
+  username: string;
+  user_photo: string | null;
+  points: number;
+  rank: number;
+};
+
 const DEV_TELEGRAM_ID_KEY = "mybondhu-dev-telegram-id";
 const API_BASE_URL = (
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
@@ -60,6 +68,10 @@ const API_BASE_URL = (
 const LOCAL_STATE_KEY_PREFIX = "mybondhu-local-state";
 const LOCAL_MINING_COOLDOWN_MIN = 1;
 const LOCAL_MINING_REWARD = 10;
+const SYNC_COOLDOWN_MS = 15000;
+let syncInFlight: Promise<void> | null = null;
+let lastSyncAt = 0;
+let lastSyncedTelegramId: string | null = null;
 
 type ApiUser = {
   userid: string;
@@ -331,8 +343,7 @@ const getLocalMiningStatus = (state: LocalState): MiningStatus => {
   };
 };
 
-export const syncTelegramUser = async (): Promise<void> => {
-  const telegramId = getActiveTelegramId();
+const performSyncTelegramUser = async (telegramId: string): Promise<void> => {
   const user = getTelegramUser();
   const state = getLocalState(telegramId);
 
@@ -369,6 +380,33 @@ export const syncTelegramUser = async (): Promise<void> => {
     state.profile = { ...state.profile, ...state.user };
     saveLocalState(telegramId, state);
   }
+};
+
+export const syncTelegramUser = async (): Promise<void> => {
+  const telegramId = getActiveTelegramId();
+  const now = Date.now();
+
+  if (
+    !syncInFlight &&
+    lastSyncedTelegramId === telegramId &&
+    now - lastSyncAt < SYNC_COOLDOWN_MS
+  ) {
+    return;
+  }
+
+  if (!syncInFlight) {
+    syncInFlight = (async () => {
+      try {
+        await performSyncTelegramUser(telegramId);
+        lastSyncAt = Date.now();
+        lastSyncedTelegramId = telegramId;
+      } finally {
+        syncInFlight = null;
+      }
+    })();
+  }
+
+  await syncInFlight;
 };
 
 export const getUserProfile = async (): Promise<AppUser> => {
@@ -507,6 +545,22 @@ export const updateProfile = async (
 
 export const getNotifications = async (): Promise<AppNotification[]> => {
   return getLocalState(getActiveTelegramId()).notifications;
+};
+
+export const getLeaderboard = async (limit = 20): Promise<{ players: LeaderboardPlayer[]; me: LeaderboardPlayer | null }> => {
+  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const telegramId = getActiveTelegramId();
+  const params = new URLSearchParams({
+    limit: String(safeLimit),
+    userid: telegramId,
+  });
+  const result = await requestJson<{ players: LeaderboardPlayer[]; me: LeaderboardPlayer | null }>(
+    apiUrl(`/api/leaderboard?${params.toString()}`),
+  );
+  return {
+    players: result.players ?? [],
+    me: result.me ?? null,
+  };
 };
 
 export const markNotificationAsRead = async (notificationId: number): Promise<void> => {

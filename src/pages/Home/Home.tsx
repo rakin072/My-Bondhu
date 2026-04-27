@@ -16,7 +16,6 @@ import {
   getMiningStatus,
   getUserProfile,
   startMiningSession,
-  syncTelegramUser,
   type AppUser,
 } from "../../lib/telegram";
 
@@ -53,7 +52,6 @@ export const Home = (): JSX.Element => {
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        await syncTelegramUser();
         await refreshData();
       } catch {
         showInfoToast("Failed to load mining data");

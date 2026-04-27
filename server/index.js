@@ -137,6 +137,62 @@ app.get("/api/users/:userid", async (req, res, next) => {
   }
 });
 
+app.get("/api/leaderboard", async (req, res, next) => {
+  try {
+    const rawLimit = Number(req.query.limit ?? 20);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.trunc(rawLimit))) : 20;
+    const { userid } = req.query;
+
+    const players = await db.all(
+      `
+      SELECT
+        userid,
+        username,
+        user_photo,
+        points,
+        ROW_NUMBER() OVER (ORDER BY points DESC, account_creation_time ASC, userid ASC) AS rank
+      FROM users
+      ORDER BY points DESC, account_creation_time ASC, userid ASC
+      LIMIT ?
+      `,
+      [limit],
+    );
+
+    let me = null;
+    if (userid) {
+      me = await db.get(
+        `
+        SELECT
+          userid,
+          username,
+          user_photo,
+          points,
+          rank
+        FROM (
+          SELECT
+            userid,
+            username,
+            user_photo,
+            points,
+            ROW_NUMBER() OVER (ORDER BY points DESC, account_creation_time ASC, userid ASC) AS rank
+          FROM users
+        ) ranked
+        WHERE userid = ?
+        `,
+        [String(userid)],
+      );
+    }
+
+    return res.json({
+      players,
+      me,
+      total: players.length,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.put("/api/users/:userid", async (req, res, next) => {
   try {
     const { userid } = req.params;

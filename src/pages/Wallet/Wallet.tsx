@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, ChevronDown } from "lucide-react";
 import { GoldCoin } from "../../components/GoldCoin";
-import { getTransactions, getUserProfile, syncTelegramUser, type AppTransaction, type AppUser } from "../../lib/telegram";
+import { getTransactions, getUserProfile, type AppTransaction, type AppUser } from "../../lib/telegram";
 
 type Transaction = {
     id: number;
@@ -59,7 +59,6 @@ export const Wallet = (): JSX.Element => {
     useEffect(() => {
         const bootstrap = async () => {
             try {
-                await syncTelegramUser();
                 const [profile, items] = await Promise.all([getUserProfile(), getTransactions()]);
                 setUser(profile);
                 setTransactions(items.map(mapTransaction));

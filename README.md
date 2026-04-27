@@ -103,13 +103,7 @@ Notes:
 - This is ideal for development, testing, and sharing a demo.
 - For production, a permanent hostname still needs Cloudflare DNS or another domain setup.
 
-### Netlify temporary redirect
+### Netlify redirects
 
-For temporary testing, Netlify can redirect to the current Cloudflare Quick Tunnel URL.
-
-Current redirect target:
-
-- `https://performs-united-highways-conference.trycloudflare.com`
-
-This redirect is temporary because the `trycloudflare.com` URL changes when the tunnel restarts.
+Netlify is configured with an SPA fallback redirect to `index.html` so client-side routing works in production.
 

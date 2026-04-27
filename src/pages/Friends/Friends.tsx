@@ -1,73 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Check, Trophy } from "lucide-react";
 import { GoldCoin } from "../../components/GoldCoin";
-
-// Data types
-type RankItem = {
-    id: number;
-    name: string;
-    rankStr: string;
-    coins: string | number;
-    avatar: string;
-};
-
-type RankFilterData = {
-    me: { rankStr: string; coins: number };
-    top3: RankItem[];
-    others: RankItem[];
-};
-
-// Static Data
-const DUMMY_DATA: Record<"Today" | "1 Week" | "1 Month" | "All Time", RankFilterData> = {
-    "Today": {
-        me: { rankStr: "48th", coins: 10 },
-        top3: [
-            { id: 1, name: "Dericbackup", rankStr: "1st", coins: 1234, avatar: "https://i.pravatar.cc/150?u=deric1" },
-            { id: 2, name: "Smith", rankStr: "2nd", coins: 1231, avatar: "https://i.pravatar.cc/150?u=smith1" },
-            { id: 3, name: "Shams mia", rankStr: "3rd", coins: 1123, avatar: "https://i.pravatar.cc/150?u=shams1" },
-        ],
-        others: [
-            { id: 4, name: "Dericbackup", rankStr: "4th", coins: 114, avatar: "https://i.pravatar.cc/150?u=deric2" },
-            { id: 5, name: "Smith", rankStr: "5th", coins: 113, avatar: "https://i.pravatar.cc/150?u=smith2" },
-        ]
-    },
-    "1 Week": {
-        me: { rankStr: "120th", coins: 190 },
-        top3: [
-            { id: 1, name: "Dericbackup", rankStr: "1st", coins: "1234894", avatar: "https://i.pravatar.cc/150?u=deric1" },
-            { id: 2, name: "Smith", rankStr: "2nd", coins: "12315124", avatar: "https://i.pravatar.cc/150?u=smith1" },
-            { id: 3, name: "Shams mia", rankStr: "3rd", coins: "11231231", avatar: "https://i.pravatar.cc/150?u=shams1" },
-        ],
-        others: [
-            { id: 4, name: "kickup", rankStr: "4th", coins: 1914, avatar: "https://i.pravatar.cc/150?u=kick1" },
-            { id: 5, name: "mcith", rankStr: "5th", coins: 1173, avatar: "https://i.pravatar.cc/150?u=mcith1" },
-        ]
-    },
-    "1 Month": {
-        me: { rankStr: "120th", coins: 108 },
-        top3: [
-            { id: 1, name: "rab Mia", rankStr: "46th", coins: 476, avatar: "https://i.pravatar.cc/150?u=rab1" },
-            { id: 2, name: "hiabi", rankStr: "47th", coins: 411, avatar: "https://i.pravatar.cc/150?u=hiabi1" },
-            { id: 3, name: "Shamu", rankStr: "48th", coins: 341, avatar: "https://i.pravatar.cc/150?u=shamu1" },
-        ],
-        others: [
-            { id: 4, name: "saia", rankStr: "49th", coins: 321, avatar: "https://i.pravatar.cc/150?u=saia1" },
-            { id: 5, name: "Mia", rankStr: "50th", coins: 312, avatar: "https://i.pravatar.cc/150?u=mia1" },
-        ]
-    },
-    "All Time": {
-        me: { rankStr: "200th", coins: 50 },
-        top3: [
-            { id: 1, name: "Legend", rankStr: "1st", coins: "9999999", avatar: "https://i.pravatar.cc/150?u=leg1" },
-            { id: 2, name: "Pro Gamer", rankStr: "2nd", coins: "8888888", avatar: "https://i.pravatar.cc/150?u=pro1" },
-            { id: 3, name: "Master", rankStr: "3rd", coins: "7777777", avatar: "https://i.pravatar.cc/150?u=mas1" },
-        ],
-        others: [
-            { id: 4, name: "Expert", rankStr: "4th", coins: 66666, avatar: "https://i.pravatar.cc/150?u=exp1" },
-            { id: 5, name: "Skilled", rankStr: "5th", coins: 55555, avatar: "https://i.pravatar.cc/150?u=ski1" },
-        ]
-    }
-};
+import { getLeaderboard, type LeaderboardPlayer } from "../../lib/telegram";
 
 const MedalIcon = ({ place }: { place: number }) => {
     // Only 1, 2, 3 have medals
@@ -90,13 +24,50 @@ const MedalIcon = ({ place }: { place: number }) => {
 };
 
 export const Friends = (): JSX.Element => {
-    // Dropdown state
     const [filter, setFilter] = useState<"Today" | "1 Week" | "1 Month" | "All Time">("Today");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
+    const [players, setPlayers] = useState<LeaderboardPlayer[]>([]);
+    const [me, setMe] = useState<LeaderboardPlayer | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
-    // Get current data
-    const data = DUMMY_DATA[filter];
+    const getOrdinalRank = (rank: number): string => {
+        const mod10 = rank % 10;
+        const mod100 = rank % 100;
+        if (mod10 === 1 && mod100 !== 11) return `${rank}st`;
+        if (mod10 === 2 && mod100 !== 12) return `${rank}nd`;
+        if (mod10 === 3 && mod100 !== 13) return `${rank}rd`;
+        return `${rank}th`;
+    };
+
+    const getLimitForFilter = (currentFilter: "Today" | "1 Week" | "1 Month" | "All Time"): number => {
+        if (currentFilter === "Today") return 10;
+        if (currentFilter === "1 Week") return 20;
+        if (currentFilter === "1 Month") return 30;
+        return 50;
+    };
+
+    useEffect(() => {
+        const loadLeaderboard = async () => {
+            try {
+                setIsLoading(true);
+                setLoadError(null);
+                const result = await getLeaderboard(getLimitForFilter(filter));
+                setPlayers(result.players);
+                setMe(result.me);
+            } catch {
+                setLoadError("Failed to load leaderboard");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        void loadLeaderboard();
+    }, [filter]);
+
+    const top3 = players.slice(0, 3);
+    const others = players.slice(3);
 
     const handleCopy = () => {
         setIsCopied(true);
@@ -133,8 +104,7 @@ export const Friends = (): JSX.Element => {
                         <>
                             <div className="fixed inset-0 z-30" onClick={() => setDropdownOpen(false)}></div>
                             <div className="absolute right-0 top-[110%] w-[120px] bg-white border border-gray-100 rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.1)] py-2 z-40">
-                                {Object.keys(DUMMY_DATA).map((key) => {
-                                    const filterKey = key as keyof typeof DUMMY_DATA;
+                                {(["Today", "1 Week", "1 Month", "All Time"] as const).map((filterKey) => {
                                     const isSelected = filter === filterKey;
                                     return (
                                         <button
@@ -165,29 +135,34 @@ export const Friends = (): JSX.Element => {
 
                 {/* Top 3 Card */}
                 <div className="bg-white rounded-[10px] shadow-sm flex flex-col px-4 pt-1 mb-3">
-                    {data.top3.map((user, index) => (
-                        <div key={user.id} className={`flex items-center py-[14px] gap-3 ${index !== data.top3.length - 1 ? "border-b border-gray-100/80" : ""}`}>
+                    {isLoading && <div className="py-6 text-center text-sm text-gray-500">Loading leaderboard...</div>}
+                    {!isLoading && loadError && <div className="py-6 text-center text-sm text-red-500">{loadError}</div>}
+                    {!isLoading && !loadError && top3.length === 0 && (
+                        <div className="py-6 text-center text-sm text-gray-500">No players found</div>
+                    )}
+                    {!isLoading && !loadError && top3.map((user, index) => (
+                        <div key={user.userid} className={`flex items-center py-[14px] gap-3 ${index !== top3.length - 1 ? "border-b border-gray-100/80" : ""}`}>
 
                             {/* Medals container / spacer */}
-                            {["1st", "2nd", "3rd"].includes(user.rankStr) ? (
+                            {user.rank <= 3 ? (
                                 <MedalIcon place={index + 1} />
                             ) : (
                                 <div className="w-[30px] shrink-0" />
                             )}
 
-                            <img src={user.avatar} className="w-[42px] h-[42px] rounded-full object-cover shrink-0 bg-gray-200" alt={user.name} />
+                            <img src={user.user_photo ?? `https://i.pravatar.cc/150?u=${user.userid}`} className="w-[42px] h-[42px] rounded-full object-cover shrink-0 bg-gray-200" alt={user.username} />
 
                             <div className="flex flex-col gap-0.5 flex-1 w-full overflow-hidden">
                                 <div className="flex items-center gap-1.5 w-full">
-                                    <span className="text-[15px] font-semibold text-[#000000] truncate max-w-[120px]">{user.name}</span>
-                                    <div className={`flex items-center gap-0.5 text-[11px] font-bold shrink-0 ${["1st", "2nd", "3rd"].includes(user.rankStr) ? "text-[#2C5FF6]" : "text-[#6B7280]"}`}>
+                                    <span className="text-[15px] font-semibold text-[#000000] truncate max-w-[120px]">{user.username}</span>
+                                    <div className={`flex items-center gap-0.5 text-[11px] font-bold shrink-0 ${user.rank <= 3 ? "text-[#2C5FF6]" : "text-[#6B7280]"}`}>
                                         <Trophy className="w-3 h-3" strokeWidth={2.5} />
-                                        <span>{user.rankStr}</span>
+                                        <span>{getOrdinalRank(user.rank)}</span>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                     <GoldCoin className="w-4 h-4" />
-                                    <span className="text-[#FBBF24] text-[15px] font-black">{user.coins}</span>
+                                    <span className="text-[#FBBF24] text-[15px] font-black">{user.points}</span>
                                 </div>
                             </div>
                         </div>
@@ -196,21 +171,21 @@ export const Friends = (): JSX.Element => {
 
                 {/* Rest of the list */}
                 <div className="bg-white rounded-[10px] shadow-sm flex flex-col px-4 pt-1 mb-8">
-                    {data.others.map((user, index) => (
-                        <div key={user.id} className={`flex items-center py-[14px] gap-3 ${index !== data.others.length - 1 ? "border-b border-gray-100/80" : ""}`}>
-                            <img src={user.avatar} className="w-[42px] h-[42px] rounded-full object-cover shrink-0 bg-gray-200" alt={user.name} />
+                    {others.map((user, index) => (
+                        <div key={user.userid} className={`flex items-center py-[14px] gap-3 ${index !== others.length - 1 ? "border-b border-gray-100/80" : ""}`}>
+                            <img src={user.user_photo ?? `https://i.pravatar.cc/150?u=${user.userid}`} className="w-[42px] h-[42px] rounded-full object-cover shrink-0 bg-gray-200" alt={user.username} />
 
                             <div className="flex flex-col gap-0.5 flex-1 w-full overflow-hidden">
                                 <div className="flex items-center gap-1.5">
-                                    <span className="text-[15px] font-semibold text-[#000000] truncate max-w-[120px]">{user.name}</span>
+                                    <span className="text-[15px] font-semibold text-[#000000] truncate max-w-[120px]">{user.username}</span>
                                     <div className="flex items-center gap-0.5 text-[#6B7280] text-[11px] font-bold shrink-0">
                                         <Trophy className="w-3 h-3" strokeWidth={2.5} />
-                                        <span>{user.rankStr}</span>
+                                        <span>{getOrdinalRank(user.rank)}</span>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                     <GoldCoin className="w-4 h-4" />
-                                    <span className="text-[#FBBF24] text-[15px] font-black">{user.coins}</span>
+                                    <span className="text-[#FBBF24] text-[15px] font-black">{user.points}</span>
                                 </div>
                             </div>
                         </div>
@@ -232,19 +207,19 @@ export const Friends = (): JSX.Element => {
 
                 <div className="bg-white rounded-[8px] border border-[#2C5FF6] shadow-md flex items-center justify-between px-4 py-[14px]">
                     <div className="flex items-center gap-4">
-                        <img src="https://i.pravatar.cc/150?u=nasir" className="w-[42px] h-[42px] rounded-full object-cover shrink-0 bg-gray-200" alt="Me" />
+                        <img src={me?.user_photo ?? "https://i.pravatar.cc/150?u=me"} className="w-[42px] h-[42px] rounded-full object-cover shrink-0 bg-gray-200" alt="Me" />
                         <div className="flex items-center gap-2">
                             <span className="text-[15px] font-bold text-[#000000]">Me</span>
                             <div className="flex items-center gap-0.5 text-[#2C5FF6] text-[12px] font-bold">
                                 <Trophy className="w-3.5 h-3.5" strokeWidth={2.5} />
-                                <span>{data.me.rankStr}</span>
+                                <span>{me ? getOrdinalRank(me.rank) : "--"}</span>
                             </div>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-1.5">
                         <GoldCoin className="w-[18px] h-[18px]" />
-                        <span className="text-[#FBBF24] text-[16px] font-black">{data.me.coins}</span>
+                        <span className="text-[#FBBF24] text-[16px] font-black">{me?.points ?? 0}</span>
                     </div>
                 </div>
             </div>

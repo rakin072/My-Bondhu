@@ -58,10 +58,8 @@ export type LeaderboardPlayer = {
 };
 
 const DEV_TELEGRAM_ID_KEY = "mybondhu-dev-telegram-id";
-const API_BASE_URL = (
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "https://performs-united-highways-conference.trycloudflare.com"
-).replace(/\/$/, "");
+const LAST_TELEGRAM_ID_KEY = "mybondhu-last-telegram-id";
+const API_BASE_URL = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(/\/$/, "");
 const LOCAL_STATE_KEY_PREFIX = "mybondhu-local-state";
 const DOCUMENT_NOTIFICATION_ID = 1;
 const SYNC_COOLDOWN_MS = 15000;
@@ -135,6 +133,10 @@ const getTelegramUser = (): TelegramWebAppUser | null => {
 
 const apiUrl = (path: string): string => {
   if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  if (!API_BASE_URL) {
     return path;
   }
 
@@ -257,7 +259,14 @@ const getDevTelegramId = (): string => {
 export const getActiveTelegramId = (): string => {
   const user = getTelegramUser();
   if (user?.id) {
-    return String(user.id);
+    const id = String(user.id);
+    window.localStorage.setItem(LAST_TELEGRAM_ID_KEY, id);
+    return id;
+  }
+
+  const lastTelegramId = window.localStorage.getItem(LAST_TELEGRAM_ID_KEY);
+  if (lastTelegramId) {
+    return lastTelegramId;
   }
 
   return getDevTelegramId();
@@ -623,6 +632,10 @@ export const initTelegramWebApp = (): TelegramInitResult => {
   }
 
   webApp.ready();
+
+  if (webApp.initDataUnsafe?.user?.id) {
+    window.localStorage.setItem(LAST_TELEGRAM_ID_KEY, String(webApp.initDataUnsafe.user.id));
+  }
 
   if (!webApp.isExpanded) {
     webApp.expand();

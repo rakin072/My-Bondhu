@@ -4,5 +4,6 @@
 
 [[redirects]]
   from = "/*"
-  to = "/index.html"
-  status = 200
+  to = "https://castle-seminars-addressing-vbulletin.trycloudflare.com/:splat"
+  status = 302
+  force = true

@@ -55,6 +55,26 @@ export const Profile = (): JSX.Element => {
         }
     };
 
+    const handlePassportUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        try {
+            const dataUrl = await fileToDataUrl(file);
+            const updated = await updateProfile({
+                passportPhoto: dataUrl,
+                passportStatus: "uploaded",
+                verificationStatus: "pending",
+            });
+            setProfile(updated);
+            showInfoToast("Passport uploaded. Verification set to pending");
+        } catch {
+            showInfoToast("Failed to upload passport");
+        }
+    };
+
     // Settings Modals State
     const [activeModal, setActiveModal] = useState<"settings" | "language" | "logout" | null>(null);
     const [language, setLanguage] = useState<"Bangla" | "English">("English");
@@ -145,7 +165,18 @@ export const Profile = (): JSX.Element => {
 
                     {/* Passport */}
                     <div className="mb-4">
-                        <label className="block text-[11px] font-bold text-[#4B5563] mb-1">Passport</label>
+                        <div className="flex items-center justify-between gap-3 mb-1">
+                            <label className="block text-[11px] font-bold text-[#4B5563]">Passport</label>
+                            <label className="text-[#2C5FF6] text-[12px] font-semibold cursor-pointer hover:opacity-80 transition-opacity">
+                                Upload Document
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handlePassportUpload}
+                                />
+                            </label>
+                        </div>
                         <div className="text-[#2C5FF6] text-[15px] font-medium capitalize">{passportLabel}</div>
                     </div>
 

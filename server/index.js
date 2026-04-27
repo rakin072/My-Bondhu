@@ -38,7 +38,7 @@ const initDatabase = async () => {
       referenced_by TEXT,
       points INTEGER NOT NULL DEFAULT 0,
       passport_photo TEXT,
-      verification_status TEXT NOT NULL DEFAULT 'pending'
+      verification_status TEXT NOT NULL DEFAULT 'inactive'
     );
   `);
 
@@ -97,7 +97,7 @@ app.post("/api/users", async (req, res, next) => {
         points,
         passport_photo,
         verification_status
-      ) VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, COALESCE(?, 'pending'))
+      ) VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?, ?, ?, COALESCE(?, 'inactive'))
       `,
       [
         String(userid),

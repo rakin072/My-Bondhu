@@ -158,7 +158,7 @@ const mapApiUserToProfile = (apiUser: ApiUser, language: "Bangla" | "English"): 
     avatarUrl: apiUser.user_photo,
     language,
     passportStatus: apiUser.passport_photo ? "uploaded" : "pending",
-    verificationStatus: apiUser.verification_status ?? "pending",
+    verificationStatus: apiUser.verification_status ?? "inactive",
     canWithdraw: apiUser.verification_status === "verified" ? 1 : 0,
   };
 };
@@ -190,7 +190,7 @@ const createBackendUser = async (telegramId: string, user: TelegramWebAppUser | 
       userid: telegramId,
       username,
       user_photo: user?.photo_url ?? null,
-      verification_status: "pending",
+      verification_status: "inactive",
       points: 0,
     }),
   });
@@ -263,7 +263,7 @@ const createDefaultLocalState = (telegramId: string): LocalState => {
     avatarUrl: null,
     language: "English",
     passportStatus: "pending",
-    verificationStatus: "pending",
+    verificationStatus: "inactive",
     canWithdraw: 0,
   };
 
@@ -510,6 +510,7 @@ export const getProfile = async (): Promise<AppProfile> => {
 
 export const updateProfile = async (
   payload: Partial<Pick<AppProfile, "avatarUrl" | "language" | "passportStatus" | "verificationStatus">> & {
+    passportPhoto?: string | null;
     canWithdraw?: boolean;
   },
 ): Promise<AppProfile> => {
@@ -525,6 +526,7 @@ export const updateProfile = async (
   try {
     const backendPayload: Parameters<typeof updateBackendUser>[1] = {
       user_photo: payload.avatarUrl ?? state.profile.avatarUrl,
+      passport_photo: payload.passportPhoto,
       verification_status: payload.verificationStatus ?? state.profile.verificationStatus,
     };
 

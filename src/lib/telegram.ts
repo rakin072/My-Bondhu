@@ -19,12 +19,9 @@ export type MiningStatus = {
   active: boolean;
   canClaim: boolean;
   remainingMin: number;
-  session?: {
-    id: number;
-    startedAt: string;
-    claimedAt: string | null;
-    status: string;
-  };
+  miningStatus?: "idle" | "active" | "completed";
+  miningStartTime?: string | null;
+  miningEndTime?: string | null;
 };
 
 export type AppTransaction = {
@@ -66,8 +63,6 @@ const API_BASE_URL = (
   "https://performs-united-highways-conference.trycloudflare.com"
 ).replace(/\/$/, "");
 const LOCAL_STATE_KEY_PREFIX = "mybondhu-local-state";
-const LOCAL_MINING_COOLDOWN_MIN = 1;
-const LOCAL_MINING_REWARD = 10;
 const DOCUMENT_NOTIFICATION_ID = 1;
 const SYNC_COOLDOWN_MS = 15000;
 let syncInFlight: Promise<void> | null = null;
@@ -84,6 +79,9 @@ type ApiUser = {
   points: number;
   passport_photo: string | null;
   verification_status: string;
+  mining_start_time?: string | null;
+  mining_end_time?: string | null;
+  mining_status?: "idle" | "active" | "completed" | string;
 };
 
 class ApiError extends Error {
@@ -100,10 +98,6 @@ type LocalState = {
   profile: AppProfile;
   notifications: AppNotification[];
   transactions: AppTransaction[];
-  mining: {
-    sessionId: number;
-    startedAtMs: number | null;
-  };
 };
 
 const syncDocumentNotification = (state: LocalState): void => {
@@ -319,10 +313,6 @@ const createDefaultLocalState = (telegramId: string): LocalState => {
       },
     ],
     transactions: [],
-    mining: {
-      sessionId: 0,
-      startedAtMs: null,
-    },
   };
 };
 
@@ -349,28 +339,33 @@ const saveLocalState = (telegramId: string, state: LocalState): void => {
   window.localStorage.setItem(localStateKey(telegramId), JSON.stringify(state));
 };
 
-const getLocalMiningStatus = (state: LocalState): MiningStatus => {
-  const startedAtMs = state.mining.startedAtMs;
-  if (!startedAtMs) {
-    return { active: false, canClaim: false, remainingMin: 0 };
-  }
+type MiningApiResponse = {
+  mining: {
+    mining_start_time: number | null;
+    mining_end_time: number | null;
+    mining_status: "idle" | "active" | "completed" | string;
+    remaining_sec: number;
+  };
+};
 
-  const cooldownSec = LOCAL_MINING_COOLDOWN_MIN * 60;
-  const elapsedSec = Math.floor((Date.now() - startedAtMs) / 1000);
-  const remainingSec = Math.max(0, cooldownSec - elapsedSec);
-  const canClaim = remainingSec === 0;
-
+const mapMiningApiToStatus = (data: MiningApiResponse["mining"]): MiningStatus => {
+  const remainingSec = Math.max(0, Math.trunc(Number(data.remaining_sec ?? 0) || 0));
+  const miningStatus = (data.mining_status ?? "idle") as "idle" | "active" | "completed";
+  const active = miningStatus === "active" || miningStatus === "completed";
+  const canClaim = miningStatus === "completed";
   return {
-    active: true,
+    active,
     canClaim,
     remainingMin: Math.ceil(remainingSec / 60),
-    session: {
-      id: state.mining.sessionId,
-      startedAt: new Date(startedAtMs).toISOString(),
-      claimedAt: null,
-      status: canClaim ? "completed" : "active",
-    },
+    miningStatus,
+    miningStartTime: data.mining_start_time === null ? null : new Date(data.mining_start_time * 1000).toISOString(),
+    miningEndTime: data.mining_end_time === null ? null : new Date(data.mining_end_time * 1000).toISOString(),
   };
+};
+
+const fetchMiningStatus = async (telegramId: string): Promise<MiningStatus> => {
+  const result = await requestJson<MiningApiResponse>(apiUrl(`/api/users/${telegramId}/mining`));
+  return mapMiningApiToStatus(result.mining);
 };
 
 const performSyncTelegramUser = async (telegramId: string): Promise<void> => {
@@ -458,63 +453,48 @@ export const getUserProfile = async (): Promise<AppUser> => {
 
 export const startMiningSession = async (): Promise<MiningStatus> => {
   const telegramId = getActiveTelegramId();
-
-  const state = getLocalState(telegramId);
-  const status = getLocalMiningStatus(state);
-  if (!status.active) {
-    state.mining.sessionId += 1;
-    state.mining.startedAtMs = Date.now();
-    saveLocalState(telegramId, state);
-  }
-
-  return getLocalMiningStatus(getLocalState(telegramId));
+  await requestJson<MiningApiResponse>(apiUrl(`/api/users/${telegramId}/mine`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return await fetchMiningStatus(telegramId);
 };
 
 export const getMiningStatus = async (): Promise<MiningStatus> => {
-  return getLocalMiningStatus(getLocalState(getActiveTelegramId()));
+  return await fetchMiningStatus(getActiveTelegramId());
 };
 
 export const claimMiningReward = async (): Promise<{ reward: number; user: AppUser }> => {
   const telegramId = getActiveTelegramId();
-
   const state = getLocalState(telegramId);
-  const status = getLocalMiningStatus(state);
-  if (!status.active || !status.canClaim) {
-    throw new Error("Reward is not ready yet");
-  }
+  const result = await requestJson<{ reward: number; user: ApiUser }>(apiUrl(`/api/users/${telegramId}/claim`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
 
-  state.user.balance += LOCAL_MINING_REWARD;
-  state.user.updatedAt = nowIso();
-  state.profile.balance = state.user.balance;
-  state.profile.updatedAt = state.user.updatedAt;
+  const mapped = mapApiUserToAppUser(result.user);
+  state.user = mapped;
+  state.profile = {
+    ...state.profile,
+    ...mapApiUserToProfile(result.user, state.profile.language),
+    language: state.profile.language,
+  };
 
   state.transactions = [
     {
       id: state.transactions.length + 1,
       type: "mining",
-      amount: LOCAL_MINING_REWARD,
+      amount: Number(result.reward) || 0,
       note: "Mining reward",
       createdAt: nowIso(),
     },
     ...state.transactions,
   ];
 
-  state.mining.startedAtMs = null;
-  try {
-    const backendUser = await updateBackendUser(telegramId, { points: state.user.balance });
-    state.user = mapApiUserToAppUser(backendUser);
-    state.profile = {
-      ...state.profile,
-      ...mapApiUserToProfile(backendUser, state.profile.language),
-      language: state.profile.language,
-    };
-  } catch {
-    // Keep local-only update when backend is unavailable.
-  }
-
   saveLocalState(telegramId, state);
-
-  return { reward: LOCAL_MINING_REWARD, user: state.user };
+  return { reward: Number(result.reward) || 0, user: mapped };
 };
 
 export const getTransactions = async (): Promise<AppTransaction[]> => {

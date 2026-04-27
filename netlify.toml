@@ -4,6 +4,5 @@
 
 [[redirects]]
   from = "/*"
-  to = "https://performs-united-highways-conference.trycloudflare.com/:splat"
-  status = 302
-  force = true
+  to = "/index.html"
+  status = 200

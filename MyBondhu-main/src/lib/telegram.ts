@@ -53,10 +53,7 @@ export type AppNotification = {
 };
 
 const DEV_TELEGRAM_ID_KEY = "mybondhu-dev-telegram-id";
-const API_BASE_URL = (
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "https://performs-united-highways-conference.trycloudflare.com"
-).replace(/\/$/, "");
+const API_BASE_URL = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "").replace(/\/$/, "");
 const LOCAL_STATE_KEY_PREFIX = "mybondhu-local-state";
 const LOCAL_MINING_COOLDOWN_MIN = 1;
 const LOCAL_MINING_REWARD = 10;
@@ -74,6 +71,10 @@ type LocalState = {
 
 const apiUrl = (path: string): string => {
   if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+
+  if (!API_BASE_URL) {
     return path;
   }
 

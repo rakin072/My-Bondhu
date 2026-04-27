@@ -25,6 +25,7 @@ export const Home = (): JSX.Element => {
   const [isMining, setIsMining] = useState(false);
   const [canClaim, setCanClaim] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [miningStatus, setMiningStatus] = useState<"idle" | "active" | "completed">("idle");
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("Coming Soon!");
@@ -47,6 +48,7 @@ export const Home = (): JSX.Element => {
     setIsMining(miningStatus.active);
     setCanClaim(miningStatus.canClaim);
     setTimeLeft(Math.max(0, miningStatus.remainingMin * 60));
+    setMiningStatus(miningStatus.miningStatus ?? (miningStatus.canClaim ? "completed" : miningStatus.active ? "active" : "idle"));
   };
 
   useEffect(() => {
@@ -66,15 +68,10 @@ export const Home = (): JSX.Element => {
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
 
-    if (isMining && !canClaim && timeLeft > 0) {
+    if (miningStatus === "active" && timeLeft > 0) {
       interval = setInterval(() => {
         setTimeLeft((prev) => {
-          if (prev <= 1) {
-            setCanClaim(true);
-            return 0;
-          }
-
-          return prev - 1;
+          return prev > 0 ? prev - 1 : 0;
         });
       }, 1000);
     }
@@ -82,7 +79,19 @@ export const Home = (): JSX.Element => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isMining, canClaim, timeLeft]);
+  }, [miningStatus, timeLeft]);
+
+  useEffect(() => {
+    let poll: ReturnType<typeof setInterval> | null = null;
+    if (miningStatus === "active") {
+      poll = setInterval(() => {
+        void refreshData();
+      }, 4000);
+    }
+    return () => {
+      if (poll) clearInterval(poll);
+    };
+  }, [miningStatus]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -105,8 +114,9 @@ export const Home = (): JSX.Element => {
   };
 
   const handleMiningAction = async () => {
-    if (!canClaim) {
-      showInfoToast("Reward is not ready yet");
+    if (miningStatus !== "completed") {
+      if (miningStatus === "active") showInfoToast("Mining in progress");
+      else showInfoToast("Start mining first");
       return;
     }
 
@@ -143,7 +153,7 @@ export const Home = (): JSX.Element => {
             className={`absolute inset-0 w-full h-full object-cover object-bottom brightness-95 transition-opacity duration-1000 ${isMining ? "opacity-100" : "opacity-0"}`}
           />
         </div>
-        {!isMining ? (
+        {miningStatus === "idle" ? (
           <>
             <Card className="bg-[#2C5FF6] border-0 mb-4 rounded-xl flex-shrink-0">
               <CardContent className="p-4">
@@ -197,7 +207,7 @@ export const Home = (): JSX.Element => {
                 disabled={isLoading}
                 className="w-full bg-[#2C5FF6] hover:bg-[#2C5FF6]/90 text-white font-bold py-7 rounded-[26px] text-[15px] shadow-lg shadow-blue-500/20"
               >
-                {isLoading ? "PLEASE WAIT..." : "START MINING"}
+                {isLoading ? "PLEASE WAIT..." : "MINE"}
               </Button>
             </div>
           </>
@@ -215,7 +225,7 @@ export const Home = (): JSX.Element => {
                 disabled={isLoading}
                 className="bg-gradient-to-b from-[#8C98A7] to-[#5C6777] hover:from-[#7C8897] hover:to-[#4C5767] border border-gray-400/30 text-white font-extrabold py-4 px-6 rounded-[20px] text-[14px] shadow-[inset_0_2px_4px_rgba(255,255,255,0.3),0_8px_16px_rgba(0,0,0,0.15)] tracking-wide"
               >
-                {canClaim ? "CLAIM REWARD" : "MINING IN PROGRESS"}
+                {miningStatus === "completed" ? "CLAIM" : "MINING..."}
               </Button>
             </div>
           </>

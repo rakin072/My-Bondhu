@@ -17,6 +17,100 @@ const DB_PATH =
   process.env.SQLITE_DB_PATH ?? path.join(__dirname, "data", "mybondhu.db");
 let db;
 
+const MINING_DURATION_SEC = Number(process.env.MINING_DURATION_SEC ?? 60);
+const MINING_REWARD_POINTS = Number(process.env.MINING_REWARD_POINTS ?? 10);
+
+const toUnixSec = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber)) return Math.trunc(asNumber);
+
+  const parsedMs = Date.parse(String(value));
+  if (Number.isFinite(parsedMs)) return Math.trunc(parsedMs / 1000);
+
+  return null;
+};
+
+const ensureUserMiningCompletion = async (userid) => {
+  const user = await db.get(
+    "SELECT userid, mining_status, mining_end_time FROM users WHERE userid = ?",
+    [String(userid)],
+  );
+  if (!user) return null;
+
+  if (user.mining_status !== "active" || !user.mining_end_time) {
+    return user;
+  }
+
+  const endSec = toUnixSec(user.mining_end_time);
+  if (!Number.isFinite(Number(endSec))) {
+    return user;
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (nowSec >= endSec) {
+    await db.run(
+      "UPDATE users SET mining_status = 'completed' WHERE userid = ? AND mining_status = 'active'",
+      [String(userid)],
+    );
+    return await db.get(
+      "SELECT userid, mining_status, mining_start_time, mining_end_time, points FROM users WHERE userid = ?",
+      [String(userid)],
+    );
+  }
+
+  return await db.get(
+    "SELECT userid, mining_status, mining_start_time, mining_end_time, points FROM users WHERE userid = ?",
+    [String(userid)],
+  );
+};
+
+const migrateUsersTable = async () => {
+  const columns = await db.all("PRAGMA table_info(users)");
+  const existing = new Set(columns.map((col) => String(col.name)));
+
+  if (!existing.has("mining_start_time")) {
+    await db.exec("ALTER TABLE users ADD COLUMN mining_start_time INTEGER");
+  }
+
+  if (!existing.has("mining_end_time")) {
+    await db.exec("ALTER TABLE users ADD COLUMN mining_end_time INTEGER");
+  }
+
+  if (!existing.has("mining_status")) {
+    await db.exec(
+      "ALTER TABLE users ADD COLUMN mining_status TEXT NOT NULL DEFAULT 'idle' CHECK (mining_status IN ('idle','active','completed'))",
+    );
+  }
+
+  // Backfill any older ISO-string timestamps to unix seconds.
+  const legacy = await db.all(
+    `
+    SELECT userid, mining_start_time, mining_end_time
+    FROM users
+    WHERE
+      (mining_start_time IS NOT NULL AND typeof(mining_start_time) = 'text')
+      OR (mining_end_time IS NOT NULL AND typeof(mining_end_time) = 'text')
+    `,
+  );
+
+  for (const row of legacy) {
+    const startSec = toUnixSec(row.mining_start_time);
+    const endSec = toUnixSec(row.mining_end_time);
+    await db.run(
+      `
+      UPDATE users
+      SET mining_start_time = COALESCE(?, mining_start_time),
+          mining_end_time = COALESCE(?, mining_end_time)
+      WHERE userid = ?
+      `,
+      [startSec, endSec, String(row.userid)],
+    );
+  }
+};
+
 const initDatabase = async () => {
   const dbDir = path.dirname(DB_PATH);
   if (!fs.existsSync(dbDir)) {
@@ -38,16 +132,20 @@ const initDatabase = async () => {
       referenced_by TEXT,
       points INTEGER NOT NULL DEFAULT 0,
       passport_photo TEXT,
-      verification_status TEXT NOT NULL DEFAULT 'inactive'
+      verification_status TEXT NOT NULL DEFAULT 'inactive',
+      mining_start_time INTEGER,
+      mining_end_time INTEGER,
+      mining_status TEXT NOT NULL DEFAULT 'idle' CHECK (mining_status IN ('idle','active','completed'))
     );
   `);
 
+  await migrateUsersTable();
 };
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "8mb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -125,13 +223,129 @@ app.post("/api/users", async (req, res, next) => {
 app.get("/api/users/:userid", async (req, res, next) => {
   try {
     const { userid } = req.params;
-    const user = await db.get("SELECT * FROM users WHERE userid = ?", [String(userid)]);
+    const user = await ensureUserMiningCompletion(userid);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
     return res.json({ user });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/users/:userid/mining", async (req, res, next) => {
+  try {
+    const { userid } = req.params;
+    const user = await ensureUserMiningCompletion(userid);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const startSec = toUnixSec(user.mining_start_time);
+    const endSec = toUnixSec(user.mining_end_time);
+    const remainingSec =
+      user.mining_status === "active" && Number.isFinite(endSec)
+        ? Math.max(0, Math.trunc(endSec - nowSec))
+        : 0;
+
+    return res.json({
+      mining: {
+        mining_start_time: startSec,
+        mining_end_time: endSec,
+        mining_status: user.mining_status ?? "idle",
+        remaining_sec: remainingSec,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/users/:userid/mine", async (req, res, next) => {
+  try {
+    const { userid } = req.params;
+    const user = await ensureUserMiningCompletion(userid);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.mining_status === "active") {
+      return res.status(409).json({ error: "Already mining" });
+    }
+
+    if (user.mining_status === "completed") {
+      return res.status(409).json({ error: "Please claim first" });
+    }
+
+    const startSec = Math.floor(Date.now() / 1000);
+    const endSec = startSec + Math.max(1, Math.trunc(MINING_DURATION_SEC));
+
+    await db.run(
+      `
+      UPDATE users
+      SET
+        mining_start_time = ?,
+        mining_end_time = ?,
+        mining_status = 'active'
+      WHERE userid = ?
+      `,
+      [startSec, endSec, String(userid)],
+    );
+
+    return res.status(201).json({
+      mining: {
+        mining_start_time: startSec,
+        mining_end_time: endSec,
+        mining_status: "active",
+        remaining_sec: Math.max(1, Math.trunc(MINING_DURATION_SEC)),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/users/:userid/claim", async (req, res, next) => {
+  try {
+    const { userid } = req.params;
+    const user = await ensureUserMiningCompletion(userid);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.mining_status !== "completed") {
+      return res.status(409).json({ error: "Reward is not ready yet" });
+    }
+
+    const nextPoints = Math.trunc(Number(user.points ?? 0) + MINING_REWARD_POINTS);
+
+    await db.run(
+      `
+      UPDATE users
+      SET
+        points = ?,
+        mining_status = 'idle',
+        mining_start_time = NULL,
+        mining_end_time = NULL
+      WHERE userid = ? AND mining_status = 'completed'
+      `,
+      [nextPoints, String(userid)],
+    );
+
+    const updated = await db.get("SELECT * FROM users WHERE userid = ?", [String(userid)]);
+    return res.json({
+      reward: MINING_REWARD_POINTS,
+      user: updated,
+      mining: {
+        mining_start_time: null,
+        mining_end_time: null,
+        mining_status: "idle",
+        remaining_sec: 0,
+      },
+    });
   } catch (error) {
     return next(error);
   }
@@ -278,6 +492,9 @@ app.use("/api", (_req, res) => {
 });
 
 app.use((err, _req, res, _next) => {
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Uploaded image is too large. Please use a smaller photo." });
+  }
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });

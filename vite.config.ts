@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   base: "/",
   server: {
-    allowedHosts: ["performs-united-highways-conference.trycloudflare.com"],
+    allowedHosts: true,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3001",

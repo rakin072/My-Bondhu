@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Camera, Settings, Check } from "lucide-react";
 import { getProfile, updateProfile, type AppProfile } from "../../lib/telegram";
+import { useNotifications } from "../../context/NotificationContext";
 
 export const Profile = (): JSX.Element => {
+    const { refreshNotifications } = useNotifications();
     const [profile, setProfile] = useState<AppProfile | null>(null);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [showActionSheet, setShowActionSheet] = useState(false);
@@ -69,6 +71,7 @@ export const Profile = (): JSX.Element => {
                 verificationStatus: "pending",
             });
             setProfile(updated);
+            await refreshNotifications();
             showInfoToast("Passport uploaded. Verification set to pending");
         } catch {
             showInfoToast("Failed to upload passport");

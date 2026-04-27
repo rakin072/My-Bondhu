@@ -68,6 +68,7 @@ const API_BASE_URL = (
 const LOCAL_STATE_KEY_PREFIX = "mybondhu-local-state";
 const LOCAL_MINING_COOLDOWN_MIN = 1;
 const LOCAL_MINING_REWARD = 10;
+const DOCUMENT_NOTIFICATION_ID = 1;
 const SYNC_COOLDOWN_MS = 15000;
 let syncInFlight: Promise<void> | null = null;
 let lastSyncAt = 0;
@@ -103,6 +104,35 @@ type LocalState = {
     sessionId: number;
     startedAtMs: number | null;
   };
+};
+
+const syncDocumentNotification = (state: LocalState): void => {
+  const needsDocumentUpload = state.profile.passportStatus !== "uploaded";
+  const existingIndex = state.notifications.findIndex((item) => item.id === DOCUMENT_NOTIFICATION_ID);
+
+  if (!needsDocumentUpload) {
+    if (existingIndex >= 0) {
+      state.notifications.splice(existingIndex, 1);
+    }
+    return;
+  }
+
+  if (existingIndex >= 0) {
+    state.notifications[existingIndex] = {
+      ...state.notifications[existingIndex],
+      isRead: false,
+    };
+    return;
+  }
+
+  state.notifications.unshift({
+    id: DOCUMENT_NOTIFICATION_ID,
+    type: "pin",
+    title: "Upload Your Documents",
+    description: "You need to upload your passport and selfie to withdraw money",
+    isRead: false,
+    createdAt: nowIso(),
+  });
 };
 
 const getTelegramUser = (): TelegramWebAppUser | null => {
@@ -370,6 +400,7 @@ const performSyncTelegramUser = async (telegramId: string): Promise<void> => {
       ...mapApiUserToProfile(backendUser, language),
       language,
     };
+    syncDocumentNotification(state);
     saveLocalState(telegramId, state);
     return;
   } catch {
@@ -378,6 +409,7 @@ const performSyncTelegramUser = async (telegramId: string): Promise<void> => {
     state.user.lastName = user?.last_name ?? state.user.lastName;
     state.user.updatedAt = nowIso();
     state.profile = { ...state.profile, ...state.user };
+    syncDocumentNotification(state);
     saveLocalState(telegramId, state);
   }
 };
@@ -501,9 +533,12 @@ export const getProfile = async (): Promise<AppProfile> => {
     };
     state.profile = profile;
     state.user = mapApiUserToAppUser(backendUser);
+    syncDocumentNotification(state);
     saveLocalState(telegramId, state);
     return profile;
   } catch {
+    syncDocumentNotification(state);
+    saveLocalState(telegramId, state);
     return state.profile;
   }
 };
@@ -541,6 +576,7 @@ export const updateProfile = async (
     // Keep local-only profile update when backend is unavailable.
   }
 
+  syncDocumentNotification(state);
   saveLocalState(telegramId, state);
   return state.profile;
 };

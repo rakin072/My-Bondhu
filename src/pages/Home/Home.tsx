@@ -47,7 +47,7 @@ export const Home = (): JSX.Element => {
     setUser(profile);
     setIsMining(miningStatus.active);
     setCanClaim(miningStatus.canClaim);
-    setTimeLeft(Math.max(0, miningStatus.remainingMin * 60));
+    setTimeLeft(Math.max(0, miningStatus.remainingSec ?? miningStatus.remainingMin * 60));
     setMiningStatus(miningStatus.miningStatus ?? (miningStatus.canClaim ? "completed" : miningStatus.active ? "active" : "idle"));
   };
 

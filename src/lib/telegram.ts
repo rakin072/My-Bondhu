@@ -18,6 +18,7 @@ export type AppUser = {
 export type MiningStatus = {
   active: boolean;
   canClaim: boolean;
+  remainingSec: number;
   remainingMin: number;
   miningStatus?: "idle" | "active" | "completed";
   miningStartTime?: string | null;
@@ -365,6 +366,7 @@ const mapMiningApiToStatus = (data: MiningApiResponse["mining"]): MiningStatus =
   return {
     active,
     canClaim,
+    remainingSec,
     remainingMin: Math.ceil(remainingSec / 60),
     miningStatus,
     miningStartTime: data.mining_start_time === null ? null : new Date(data.mining_start_time * 1000).toISOString(),
@@ -445,11 +447,20 @@ export const syncTelegramUser = async (): Promise<void> => {
   await syncInFlight;
 };
 
+const ensureBackendUserReady = async (): Promise<void> => {
+  try {
+    await syncTelegramUser();
+  } catch {
+    // Keep UI usable even if sync fails.
+  }
+};
+
 export const getUserProfile = async (): Promise<AppUser> => {
   const telegramId = getActiveTelegramId();
   const state = getLocalState(telegramId);
 
   try {
+    await ensureBackendUserReady();
     const backendUser = await fetchBackendUser(telegramId);
     const mapped = mapApiUserToAppUser(backendUser);
     state.user = mapped;
@@ -462,6 +473,7 @@ export const getUserProfile = async (): Promise<AppUser> => {
 
 export const startMiningSession = async (): Promise<MiningStatus> => {
   const telegramId = getActiveTelegramId();
+  await ensureBackendUserReady();
   await requestJson<MiningApiResponse>(apiUrl(`/api/users/${telegramId}/mine`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -471,11 +483,13 @@ export const startMiningSession = async (): Promise<MiningStatus> => {
 };
 
 export const getMiningStatus = async (): Promise<MiningStatus> => {
+  await ensureBackendUserReady();
   return await fetchMiningStatus(getActiveTelegramId());
 };
 
 export const claimMiningReward = async (): Promise<{ reward: number; user: AppUser }> => {
   const telegramId = getActiveTelegramId();
+  await ensureBackendUserReady();
   const state = getLocalState(telegramId);
   const result = await requestJson<{ reward: number; user: ApiUser }>(apiUrl(`/api/users/${telegramId}/claim`), {
     method: "POST",
@@ -515,6 +529,7 @@ export const getProfile = async (): Promise<AppProfile> => {
   const state = getLocalState(telegramId);
 
   try {
+    await ensureBackendUserReady();
     const backendUser = await fetchBackendUser(telegramId);
     const profile = {
       ...mapApiUserToProfile(backendUser, state.profile.language),
@@ -548,6 +563,7 @@ export const updateProfile = async (
   };
 
   try {
+    await ensureBackendUserReady();
     const backendPayload: Parameters<typeof updateBackendUser>[1] = {
       user_photo: payload.avatarUrl ?? state.profile.avatarUrl,
       passport_photo: payload.passportPhoto,

@@ -147,6 +147,12 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "8mb" }));
 
+// Avoid cached API responses (prevents 304s in clients).
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",

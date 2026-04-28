@@ -361,7 +361,7 @@ type MiningApiResponse = {
 const mapMiningApiToStatus = (data: MiningApiResponse["mining"]): MiningStatus => {
   const remainingSec = Math.max(0, Math.trunc(Number(data.remaining_sec ?? 0) || 0));
   const miningStatus = (data.mining_status ?? "idle") as "idle" | "active" | "completed";
-  const active = miningStatus === "active" || miningStatus === "completed";
+  const active = miningStatus === "active";
   const canClaim = miningStatus === "completed";
   return {
     active,

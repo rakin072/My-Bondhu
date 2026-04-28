@@ -45,7 +45,7 @@ export const Home = (): JSX.Element => {
     const [profile, miningStatus] = await Promise.all([getUserProfile(), getMiningStatus()]);
 
     setUser(profile);
-    setIsMining(miningStatus.active);
+    setIsMining(miningStatus.miningStatus === "active");
     setCanClaim(miningStatus.canClaim);
     setTimeLeft(Math.max(0, miningStatus.remainingSec ?? miningStatus.remainingMin * 60));
     setMiningStatus(miningStatus.miningStatus ?? (miningStatus.canClaim ? "completed" : miningStatus.active ? "active" : "idle"));
@@ -71,6 +71,11 @@ export const Home = (): JSX.Element => {
     if (miningStatus === "active" && timeLeft > 0) {
       interval = setInterval(() => {
         setTimeLeft((prev) => {
+          if (prev <= 1) {
+            // Ask backend to flip to completed if time is up.
+            void refreshData();
+            return 0;
+          }
           return prev > 0 ? prev - 1 : 0;
         });
       }, 1000);

@@ -17,8 +17,48 @@ const DB_PATH =
   process.env.SQLITE_DB_PATH ?? path.join(__dirname, "data", "mybondhu.db");
 let db;
 
-const MINING_DURATION_SEC = Number(process.env.MINING_DURATION_SEC ?? 60);
-const MINING_REWARD_POINTS = Number(process.env.MINING_REWARD_POINTS ?? 10);
+const MINING_CONFIG_PATH =
+  process.env.MINING_CONFIG_PATH ?? path.join(__dirname, "data", "mining-config.json");
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
+
+const clampInt = (value, { min, max, fallback }) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const t = Math.trunc(n);
+  return Math.min(max, Math.max(min, t));
+};
+
+const loadMiningConfig = () => {
+  const defaults = {
+    duration_sec: 60,
+    reward_points: 10,
+    updated_at_unix: 0,
+  };
+
+  try {
+    if (!fs.existsSync(MINING_CONFIG_PATH)) {
+      fs.mkdirSync(path.dirname(MINING_CONFIG_PATH), { recursive: true });
+      fs.writeFileSync(MINING_CONFIG_PATH, JSON.stringify(defaults, null, 2), "utf8");
+      return defaults;
+    }
+
+    const raw = fs.readFileSync(MINING_CONFIG_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+
+    return {
+      duration_sec: clampInt(parsed?.duration_sec, { min: 1, max: 86400, fallback: defaults.duration_sec }),
+      reward_points: clampInt(parsed?.reward_points, { min: 0, max: 1_000_000, fallback: defaults.reward_points }),
+      updated_at_unix: clampInt(parsed?.updated_at_unix, { min: 0, max: 4_102_444_800, fallback: defaults.updated_at_unix }),
+    };
+  } catch {
+    return defaults;
+  }
+};
+
+const saveMiningConfig = (next) => {
+  fs.mkdirSync(path.dirname(MINING_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(MINING_CONFIG_PATH, JSON.stringify(next, null, 2), "utf8");
+};
 
 const toUnixSec = (value) => {
   if (value === null || value === undefined) return null;
@@ -144,6 +184,18 @@ app.use("/api", (_req, res, next) => {
   next();
 });
 
+const requireAdmin = (req, res, next) => {
+  if (!ADMIN_TOKEN) {
+    return res.status(503).json({ error: "Admin token not configured" });
+  }
+  const auth = String(req.headers.authorization ?? "");
+  const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
+  if (!token || token !== ADMIN_TOKEN) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  return next();
+};
+
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -240,6 +292,7 @@ app.get("/api/users/:userid/mining", async (req, res, next) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    const config = loadMiningConfig();
     const nowSec = Math.floor(Date.now() / 1000);
     const startSec = toUnixSec(user.mining_start_time);
     const endSec = toUnixSec(user.mining_end_time);
@@ -254,6 +307,8 @@ app.get("/api/users/:userid/mining", async (req, res, next) => {
         mining_end_time: endSec,
         mining_status: user.mining_status ?? "idle",
         remaining_sec: remainingSec,
+        reward_points: config.reward_points,
+        duration_sec: config.duration_sec,
       },
     });
   } catch (error) {
@@ -277,8 +332,9 @@ app.post("/api/users/:userid/mine", async (req, res, next) => {
       return res.status(409).json({ error: "Please claim first" });
     }
 
+    const config = loadMiningConfig();
     const startSec = Math.floor(Date.now() / 1000);
-    const endSec = startSec + Math.max(1, Math.trunc(MINING_DURATION_SEC));
+    const endSec = startSec + Math.max(1, Math.trunc(config.duration_sec));
 
     await db.run(
       `
@@ -297,7 +353,9 @@ app.post("/api/users/:userid/mine", async (req, res, next) => {
         mining_start_time: startSec,
         mining_end_time: endSec,
         mining_status: "active",
-        remaining_sec: Math.max(1, Math.trunc(MINING_DURATION_SEC)),
+        remaining_sec: Math.max(1, Math.trunc(config.duration_sec)),
+        reward_points: config.reward_points,
+        duration_sec: config.duration_sec,
       },
     });
   } catch (error) {
@@ -317,7 +375,8 @@ app.post("/api/users/:userid/claim", async (req, res, next) => {
       return res.status(409).json({ error: "Reward is not ready yet" });
     }
 
-    const nextPoints = Math.trunc(Number(user.points ?? 0) + MINING_REWARD_POINTS);
+    const config = loadMiningConfig();
+    const nextPoints = Math.trunc(Number(user.points ?? 0) + config.reward_points);
 
     await db.run(
       `
@@ -334,18 +393,36 @@ app.post("/api/users/:userid/claim", async (req, res, next) => {
 
     const updated = await db.get("SELECT * FROM users WHERE userid = ?", [String(userid)]);
     return res.json({
-      reward: MINING_REWARD_POINTS,
+      reward: config.reward_points,
       user: updated,
       mining: {
         mining_start_time: null,
         mining_end_time: null,
         mining_status: "idle",
         remaining_sec: 0,
+        reward_points: config.reward_points,
+        duration_sec: config.duration_sec,
       },
     });
   } catch (error) {
     return next(error);
   }
+});
+
+app.get("/api/admin/mining-config", requireAdmin, (_req, res) => {
+  return res.json({ config: loadMiningConfig() });
+});
+
+app.put("/api/admin/mining-config", requireAdmin, (req, res) => {
+  const current = loadMiningConfig();
+  const body = req.body ?? {};
+  const next = {
+    duration_sec: clampInt(body?.duration_sec ?? current.duration_sec, { min: 1, max: 86400, fallback: current.duration_sec }),
+    reward_points: clampInt(body?.reward_points ?? current.reward_points, { min: 0, max: 1_000_000, fallback: current.reward_points }),
+    updated_at_unix: Math.floor(Date.now() / 1000),
+  };
+  saveMiningConfig(next);
+  return res.json({ config: next });
 });
 
 app.get("/api/leaderboard", async (req, res, next) => {

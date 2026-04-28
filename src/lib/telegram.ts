@@ -132,6 +132,19 @@ const getTelegramUser = (): TelegramWebAppUser | null => {
   return window.Telegram?.WebApp?.initDataUnsafe?.user ?? null;
 };
 
+export const getTelegramUserPreview = (): Pick<AppProfile, "telegramId" | "username" | "firstName" | "lastName" | "avatarUrl"> | null => {
+  const user = getTelegramUser();
+  if (!user?.id) return null;
+
+  return {
+    telegramId: String(user.id),
+    username: user.username ?? null,
+    firstName: user.first_name ?? null,
+    lastName: user.last_name ?? null,
+    avatarUrl: user.photo_url ?? null,
+  };
+};
+
 const apiUrl = (path: string): string => {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;

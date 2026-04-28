@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, ChevronDown } from "lucide-react";
 import { GoldCoin } from "../../components/GoldCoin";
-import { getTransactions, getUserProfile, type AppTransaction, type AppUser } from "../../lib/telegram";
+import { getLeaderboard, getProfile, getTelegramUserPreview, getTransactions, type AppProfile, type AppTransaction } from "../../lib/telegram";
 
 type Transaction = {
     id: number;
@@ -43,11 +43,13 @@ const mapTransaction = (item: AppTransaction): Transaction => {
 };
 
 export const Wallet = (): JSX.Element => {
+    const preview = getTelegramUserPreview();
     const [filter, setFilter] = useState<"Today" | "1 Week" | "1 Month" | "All Time">("Today");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState("Coming Soon!");
-    const [user, setUser] = useState<AppUser | null>(null);
+    const [profile, setProfile] = useState<AppProfile | null>(null);
+    const [rank, setRank] = useState<number | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
 
     const handleWithdrawClick = () => {
@@ -59,8 +61,9 @@ export const Wallet = (): JSX.Element => {
     useEffect(() => {
         const bootstrap = async () => {
             try {
-                const [profile, items] = await Promise.all([getUserProfile(), getTransactions()]);
-                setUser(profile);
+                const [currentProfile, items, leaderboard] = await Promise.all([getProfile(), getTransactions(), getLeaderboard(20)]);
+                setProfile(currentProfile);
+                setRank(leaderboard.me?.rank ?? null);
                 setTransactions(items.map(mapTransaction));
             } catch {
                 setToastMessage("Failed to load wallet data");
@@ -80,8 +83,14 @@ export const Wallet = (): JSX.Element => {
         return true; // All Time
     }), [transactions, filter]);
 
-    const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.username || "Guest User";
-    const balance = user?.balance ?? 0;
+    const displayName =
+        [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") ||
+        profile?.username ||
+        [preview?.firstName, preview?.lastName].filter(Boolean).join(" ") ||
+        preview?.username ||
+        "Guest User";
+    const balance = profile?.balance ?? 0;
+    const avatarUrl = profile?.avatarUrl ?? null;
 
     return (
         <main className="flex-1 flex flex-col px-4 pt-1 pb-[100px] overflow-y-auto relative bg-white">
@@ -89,15 +98,20 @@ export const Wallet = (): JSX.Element => {
             <div className="bg-[#2C5FF6] rounded-xl flex flex-col items-center pt-5 pb-4 px-4 shadow-sm mb-4 relative z-0 mt-2">
                 {/* Avatar */}
                 <div className="w-[84px] h-[84px] rounded-full border-[2px] border-[#A8BFF8] overflow-hidden mb-2">
-                    {/* Default user face from pravatar that looks close enough or just a general static image */}
-                    <img src="https://i.pravatar.cc/150?u=nasir" alt="Nasir stell" className="w-full h-full object-cover" />
+                    {avatarUrl ? (
+                        <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                    ) : (
+                        <div className="w-full h-full bg-white/20 flex items-center justify-center text-white text-[18px] font-bold">
+                            {displayName.slice(0, 1).toUpperCase()}
+                        </div>
+                    )}
                 </div>
 
                 {/* Rank & Name */}
                 <div className="flex flex-col items-center text-white mb-2">
                     <div className="flex items-center gap-1 text-[11px] font-medium opacity-90 mb-0.5">
                         <Trophy className="w-3 h-3" />
-                        <span>44th</span>
+                        <span>{rank ? `${rank}th` : "-"}</span>
                     </div>
                     <h2 className="text-[20px] font-bold tracking-tight leading-none">{displayName}</h2>
                 </div>

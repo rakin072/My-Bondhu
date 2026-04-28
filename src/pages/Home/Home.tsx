@@ -14,18 +14,22 @@ import onMiningBg from "../../assets/mining.gif";
 import {
   claimMiningReward,
   getMiningStatus,
+  getLeaderboard,
+  getTelegramUserPreview,
   getUserProfile,
   startMiningSession,
   type AppUser,
 } from "../../lib/telegram";
 
 export const Home = (): JSX.Element => {
+  const preview = getTelegramUserPreview();
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMining, setIsMining] = useState(false);
   const [canClaim, setCanClaim] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [miningStatus, setMiningStatus] = useState<"idle" | "active" | "completed">("idle");
+  const [rank, setRank] = useState<number | null>(null);
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("Coming Soon!");
@@ -42,13 +46,18 @@ export const Home = (): JSX.Element => {
   };
 
   const refreshData = async () => {
-    const [profile, miningStatus] = await Promise.all([getUserProfile(), getMiningStatus()]);
+    const [profile, miningStatus, leaderboard] = await Promise.all([
+      getUserProfile(),
+      getMiningStatus(),
+      getLeaderboard(20),
+    ]);
 
     setUser(profile);
     setIsMining(miningStatus.miningStatus === "active");
     setCanClaim(miningStatus.canClaim);
     setTimeLeft(Math.max(0, miningStatus.remainingSec ?? miningStatus.remainingMin * 60));
     setMiningStatus(miningStatus.miningStatus ?? (miningStatus.canClaim ? "completed" : miningStatus.active ? "active" : "idle"));
+    setRank(leaderboard.me?.rank ?? null);
   };
 
   useEffect(() => {
@@ -139,7 +148,12 @@ export const Home = (): JSX.Element => {
     }
   };
 
-  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.username || "Guest User";
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.username ||
+    [preview?.firstName, preview?.lastName].filter(Boolean).join(" ") ||
+    preview?.username ||
+    "Guest User";
   const balance = user?.balance ?? 0;
 
 
@@ -165,7 +179,7 @@ export const Home = (): JSX.Element => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Avatar className="w-12 h-12">
-                      <AvatarImage src="" alt="Nasir stell" />
+                      <AvatarImage src={preview?.avatarUrl ?? ""} alt={displayName} />
                       <AvatarFallback className="bg-white/20 text-white font-medium flex items-center justify-center">
                         <UserIcon className="w-6 h-6 text-white" />
                       </AvatarFallback>
@@ -176,7 +190,7 @@ export const Home = (): JSX.Element => {
                           {displayName}
                         </span>
                         <MapPinIcon className="w-3.5 h-3.5 text-white" />
-                        <span className="text-white text-xs">44th</span>
+                        <span className="text-white text-xs">{rank ? `${rank}th` : "-"}</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <GoldCoin className="w-[18px] h-[18px]" />

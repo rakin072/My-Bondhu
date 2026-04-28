@@ -20,6 +20,8 @@ export type MiningStatus = {
   canClaim: boolean;
   remainingSec: number;
   remainingMin: number;
+  durationSec?: number;
+  rewardPoints?: number;
   miningStatus?: "idle" | "active" | "completed";
   miningStartTime?: string | null;
   miningEndTime?: string | null;
@@ -368,6 +370,8 @@ type MiningApiResponse = {
     mining_end_time: number | null;
     mining_status: "idle" | "active" | "completed" | string;
     remaining_sec: number;
+    duration_sec?: number;
+    reward_points?: number;
   };
 };
 
@@ -376,11 +380,15 @@ const mapMiningApiToStatus = (data: MiningApiResponse["mining"]): MiningStatus =
   const miningStatus = (data.mining_status ?? "idle") as "idle" | "active" | "completed";
   const active = miningStatus === "active";
   const canClaim = miningStatus === "completed";
+  const durationSec = Number.isFinite(Number(data.duration_sec)) ? Math.trunc(Number(data.duration_sec)) : undefined;
+  const rewardPoints = Number.isFinite(Number(data.reward_points)) ? Math.trunc(Number(data.reward_points)) : undefined;
   return {
     active,
     canClaim,
     remainingSec,
     remainingMin: Math.ceil(remainingSec / 60),
+    durationSec,
+    rewardPoints,
     miningStatus,
     miningStartTime: data.mining_start_time === null ? null : new Date(data.mining_start_time * 1000).toISOString(),
     miningEndTime: data.mining_end_time === null ? null : new Date(data.mining_end_time * 1000).toISOString(),

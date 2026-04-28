@@ -33,7 +33,7 @@ export const Home = (): JSX.Element => {
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("Coming Soon!");
-  const [earnedReward, setEarnedReward] = useState(10);
+  const [earnedReward, setEarnedReward] = useState(0);
 
   const showInfoToast = (message: string) => {
     setToastMessage(message);
@@ -58,6 +58,9 @@ export const Home = (): JSX.Element => {
     setTimeLeft(Math.max(0, miningStatus.remainingSec ?? miningStatus.remainingMin * 60));
     setMiningStatus(miningStatus.miningStatus ?? (miningStatus.canClaim ? "completed" : miningStatus.active ? "active" : "idle"));
     setRank(leaderboard.me?.rank ?? null);
+    if (miningStatus.rewardPoints && earnedReward === 0) {
+      setEarnedReward(miningStatus.rewardPoints);
+    }
   };
 
   useEffect(() => {
